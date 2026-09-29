@@ -69,10 +69,14 @@
 const uint32_t SLEEP_INTERVAL_SEC = 30;
 
 // —— baterai via A0 (voltage divider); set false jika tidak dipakai ——
+// Wiring (NodeMCU): BAT+ ── R1 200k ── A0 ── R2 100k ── GND
+// V_A0 ≈ Vbat * R2/(R1+R2); sketch mengembalikan Vbat untuk dikirim ke gateway.
 #define ENABLE_BATTERY_ADC true
 #define ADC_VREF           3.3f
 #define ADC_MAX            1023.0f
-#define BATTERY_DIVIDER    2.0f   // mis. 2x resistor sama → kalikan 2
+#define BATTERY_DIVIDER    3.0f   // (R1+R2)/R2 = (200k+100k)/100k
+// Kalibrasi: V_multimeter / V_sketch (4.00 / 3.760 ≈ 1.064)
+#define BATTERY_CAL        1.064f
 
 // —— seq di RTC memory (RAM hilang saat ESP.deepSleep) ——
 #define RTC_SEQ_MAGIC 0xD4220001UL
@@ -153,7 +157,8 @@ float readBatteryVolts()
 {
 #if ENABLE_BATTERY_ADC
   int raw = analogRead(A0);
-  return (raw / ADC_MAX) * ADC_VREF * BATTERY_DIVIDER;
+  // Hasil = tegangan baterai (V), siap dikirim ke gateway di field "battery"
+  return (raw / ADC_MAX) * ADC_VREF * BATTERY_DIVIDER * BATTERY_CAL;
 #else
   return NAN;
 #endif

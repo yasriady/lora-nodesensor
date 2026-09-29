@@ -140,19 +140,33 @@ uint32_t txSeq = 0;
 #define ADC_MAX 1023.0f
 
 /*
- * Contoh voltage divider:
+ * Voltage divider Miniboard:
  *
- * Battery ---- R1 ----+---- A0
- *                     |
- *                     R2
- *                     |
- *                    GND
+ * Battery ---- R1 200K ----+---- A0
+ *                          |
+ *                          R2 100K
+ *                          |
+ *                         GND
  *
- * Jika R1 = R2:
- * BATTERY_DIVIDER = 2.0
+ * V_A0 = Vbat * R2 / (R1 + R2) = Vbat / 3
+ * Vbat = V_A0 * (R1 + R2) / R2
+ *
+ * BATTERY_DIVIDER = (200K + 100K) / 100K = 3.0
+ *
+ * ATmega328P ADC lebih akurat jika sumber < ~10K.
+ * Thevenin 200K||100K ≈ 67K → bacaan cenderung rendah.
+ * Dummy sample + rata-rata + BATTERY_CAL mengoreksi itu.
+ *
+ * Kalibrasi:
+ *   BATTERY_CAL = V_multimeter / V_sketch (tanpa CAL)
+ *   Contoh: 4.00 / 3.345 ≈ 1.196
  */
 
-#define BATTERY_DIVIDER 2.0f
+#define BATTERY_DIVIDER 3.0f
+
+#define BATTERY_CAL 1.196f
+
+#define BATTERY_ADC_SAMPLES 8
 
 #endif
 
@@ -214,14 +228,26 @@ float readBatteryVolts()
 {
 #if ENABLE_BATTERY_ADC
 
-  int raw = analogRead(BATTERY_PIN);
+  // Sampel pertama setelah powerDown(ADC_OFF) tidak andal
+  analogRead(BATTERY_PIN);
+  delay(5);
 
-  float voltage =
-    ((float)raw / ADC_MAX) *
+  uint32_t sum = 0;
+
+  for (uint8_t i = 0; i < BATTERY_ADC_SAMPLES; i++)
+  {
+    sum += analogRead(BATTERY_PIN);
+    delay(2);
+  }
+
+  float raw =
+    (float)sum / (float)BATTERY_ADC_SAMPLES;
+
+  return
+    (raw / ADC_MAX) *
     ADC_VREF *
-    BATTERY_DIVIDER;
-
-  return voltage;
+    BATTERY_DIVIDER *
+    BATTERY_CAL;
 
 #else
 
